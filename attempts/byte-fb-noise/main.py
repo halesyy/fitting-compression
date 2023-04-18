@@ -1,5 +1,6 @@
 
 import numpy as np
+import json
 
 # Load in the test binary data.
 test_data = open("test_data.txt", "rb")
@@ -7,7 +8,7 @@ test_bytes = bytearray(test_data.read())
 
 # Max.
 MAX_BYTE_SIZE = 255 # max(test_bytes)
-CHUNK_SIZE = 5 # 100
+CHUNK_SIZE = 3 # 100
 
 # Group the byte array into chunks of bytes.
 byte_groups = []
@@ -28,55 +29,47 @@ def gradient_usefulness(byte_group: bytearray):
    diffs = group_diffs(byte_group)
    # If all the diffs are the same, then it's a pure gradient.
    if len(set(diffs)) == 1:
-      return True
+      return True, diffs[0]
    else:
-      return False
+      return False, False
 
-# rule_37r
-def overlay_37r_noise(values):
-   next_state = [0] * len(values)
-   for i in range(len(values)):
-      next_state[i] = values[i-1] ^ values[(i+1) % len(values)]
-   return next_state
+# Forward noise movement.
+def forward_noise(byte_array, seed):
+   prng = np.random.default_rng(seed)
+   while True:
+      noise = prng.integers(0, 256, size=len(byte_array), dtype=np.uint8)
+      byte_array = np.bitwise_xor(byte_array, noise)
+      yield byte_array
 
-# Given byte group, will inject noise over top of it.
-def forward_noise(byte_group, seed):
-   values = list(byte_group) # Bytes -> List
-   iterations = 1
-   # seed = 42
-   # Implement p37.
-   prng = [seed]
+# Backward noise movement.
+def reverse_noise(byte_array, seed, iters=1):
+   prng = np.random.default_rng(seed)
+   for _ in range(iters):
+      noise = prng.integers(0, 256, size=len(byte_array), dtype=np.uint8)
+      byte_array = np.bitwise_xor(byte_array, noise)
+   return byte_array
 
-   # Go through byte group, adding to the prng list.
-   for _ in range(len(byte_group) - 1):
-      prng.append(overlay_37r_noise(prng)[-1])
-
-   # Apply the cellular automaton
-   for _ in range(iterations):
-      prng = overlay_37r_noise(prng)
-      values = [x ^ y for x, y in zip(values, prng)]
-      values = values[1:] + [values[0]]
-
-   return values
-
-# Inject predictable noise to get the data into a noisey form.
-def noise(byte_group: bytearray):
-   pass
-
+# Seed used.
 seed = 42
+
+# Add in: 
+reversible_data = {
+   "seed": seed,
+   "iters": [],
+   "csize": CHUNK_SIZE
+}
 
 # Work through groups, and attempt ad noise.
 for byte_group in byte_groups:
-   noise_group = forward_noise(byte_group, seed)
    iters = 0
-   while True:
-      if gradient_usefulness(noise_group):
-         # If there's a gradient, then we can use this.
+   for noise_group in forward_noise(byte_group, seed):
+      # Useful, done.
+      useful, gradient = gradient_usefulness(noise_group)
+      if useful:
          print(f"Gradient found at {iters}!")
+         reversible_data["iters"].append([iters, gradient])
          break
-      else:
-         # If there's no gradient, then we need to add noise.
-         noise_group = forward_noise(noise_group, seed)
-         print(noise_group)
-         iters += 1
-   exit()
+      iters += 1
+
+print(reversible_data)
+# print(json.dumps(reversible_data, indent=4))
