@@ -29,9 +29,9 @@ def gradient_usefulness(byte_group: bytearray):
    diffs = group_diffs(byte_group)
    # If all the diffs are the same, then it's a pure gradient.
    if len(set(diffs)) == 1:
-      return True, diffs[0]
+      return True, byte_group[0], diffs[0]
    else:
-      return False, False
+      return False, False, False
 
 # Forward noise movement.
 def forward_noise(byte_array, seed):
@@ -64,10 +64,17 @@ for byte_group in byte_groups:
    iters = 0
    for noise_group in forward_noise(byte_group, seed):
       # Useful, done.
-      useful, gradient = gradient_usefulness(noise_group)
+      useful, start, gradient = gradient_usefulness(noise_group)
       if useful:
          print(f"Gradient found at {iters}!")
-         reversible_data["iters"].append([iters, gradient])
+         # Data:
+         # - Gradient = the gradient, slope of the line.
+         #   For say 61, this means y=61x. We're saying that
+         #   We can take `start`, add 61 `CHUNK_SIZE` times, and
+         #   then reverse the data `iters` times to get the original
+         #   data. This is very inefficient, but I'm sure there's
+         #   optimizations that can be done.
+         reversible_data["data"].append([iters, start, gradient])
          break
       iters += 1
 
